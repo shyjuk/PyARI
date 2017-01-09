@@ -15,6 +15,9 @@ class VBoard(object):
 
     def audio(self, dp, id):
         print 'Audio Start'
+        dp['data'] = {}
+        fname = dp['options']['filename'].split('.')[0]
+        dp['data']['playedfile'] = fname
         self.channel = self.channel_obj.get('channel')
         print "Monkeys! Attack %s!" % self.channel.json.get('name')
 
@@ -23,9 +26,8 @@ class VBoard(object):
         print 'Play over status: ', self.play_over_status
         if self.play_over_status:
             self.playback = self.channel.playWithId(playbackId=self.playback_id,
-                                          media='sound:hello-world')
-        else:
-            self.playback.on_event('PlaybackFinished', self.playback_finished)
+                                          media='sound:/var/lib/asterisk/sounds/custom/{0}' .format(fname))
+        return dp
 
     def playback_finished(self, playback, ev):
         print 'In playback finished'
@@ -36,40 +38,44 @@ class VBoard(object):
             self.play_over_status = True
 
     def hangup(self, dp, id):
+        dp['data'] = 'Call Hangup'
         self.hangup = True
         print 'After audio, in hangup'
         # check if playback has been completed
         print 'Check playback is over'
         self.playback.on_event('PlaybackFinished', self.playback_finished)
+        return dp
+
+# define global variables
+output, module_id = None, None
 
 def stasis_end_cb(channel, ev):
     """Handler for StasisEnd event"""
+    print output, module_id
+    Moduledata.create(module_id = module_id, data = output)
     print "Channel %s just left our application" % channel.json.get('name')
 
 def stasis_start_cb(channel_obj, ev):
     """Handler for StasisStart event"""
 
-    vb = VBoard(channel_obj, ev)
-    vb.audio(2, 1)
-    vb.audio(2, 1)
-    vb.audio(2, 1)
-    vb.audio(2, 1)
-    vb.hangup(2, 1)
+    global output, module_id
 
-    # for mods in Modules.select():
-    #     output = {}
-    #     output['outputDataArray'] = []
-    #     module_id = mods.id
-    #     dialplan = mods.dialplan['nodeDataArray']
-    #     for dp in dialplan:
-    #         if dp['type'] == 'Audio':
-    #             audiodp = vb.audio(dp, mods.id)
-    #             output['outputDataArray'].append(audiodp)
-    #         elif dp['type'] == 'Hangup':
-    #             hangupdp = vb.hangup(dp, mods.id)
-    #             output['outputDataArray'].append(hangupdp)
-    #         else:
-    #             print 'Good Day!!!!'
+    vb = VBoard(channel_obj, ev)
+
+    for mods in Modules.select():
+        output = {}
+        output['outputDataArray'] = []
+        module_id = mods.id
+        dialplan = mods.dialplan['nodeDataArray']
+        for dp in dialplan:
+            if dp['type'] == 'Audio':
+                audiodp = vb.audio(dp, mods.id)
+                output['outputDataArray'].append(audiodp)
+            elif dp['type'] == 'Hangup':
+                hangupdp = vb.hangup(dp, mods.id)
+                output['outputDataArray'].append(hangupdp)
+            else:
+                print 'Good Day!!!!'
 
 if __name__ == '__main__':
     client.on_channel_event('StasisStart', stasis_start_cb)
